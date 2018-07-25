@@ -58,7 +58,6 @@ func main() {
 	var creatorsWg sync.WaitGroup
 	StartCreators(stop, &creatorsWg)
 	StopCreators(stop, &creatorsWg)
-
 }
 
 func KafkaConfig(c inputConfig) *sarama.Config {

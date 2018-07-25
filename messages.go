@@ -29,18 +29,19 @@ func StartCreators(stop <-chan bool, wg *sync.WaitGroup) {
 }
 
 func creator(stop <-chan bool, wg *sync.WaitGroup) {
-	//defer wg.Done()
+	defer wg.Done()
 	msgData := make([]byte, config.msgSize)
 	for {
-		createdMessages <- msgData
+		select {
+		case createdMessages <- msgData:
+		default:
+		}
 		select {
 		case <-stop:
 			fmt.Println("Stopping Creator")
-			wg.Done()
+			return
 		default:
-			fmt.Println("Running Creator")
 		}
-		//time.Sleep(250 * time.Millisecond)
 	}
 }
 
