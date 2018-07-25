@@ -7,37 +7,49 @@ import (
 	"time"
 )
 
-var (
-	createdMessages = make(chan []byte, 100)
-)
+type messageCreatorStrategy func([]byte)
 
-type messageCreator func([]byte)
-
-func StopCreators(stop chan<- bool, wg *sync.WaitGroup) {
-	for i := 1; i <= config.Workers.creators; i++ {
-		stop <- true
-	}
-	fmt.Println("Queued messages %d", len(createdMessages))
-	wg.Wait()
+type messageCreator struct {
+	config          inputConfig
+	createdMessages chan<- []byte
+	wg              sync.WaitGroup
+	stop            chan bool
 }
 
-func StartCreators(stop <-chan bool, wg *sync.WaitGroup) {
-	wg.Add(config.Workers.creators)
+func MessageCreator(config inputConfig, messages chan<- []byte) *messageCreator {
+	var wg sync.WaitGroup
+	stop := make(chan bool, config.Workers.creators)
+	return &messageCreator{config, messages, wg, stop}
+}
+
+func (m *messageCreator) StopCreators() {
+	config := m.config
 	for i := 1; i <= config.Workers.creators; i++ {
-		go creator(stop, wg)
+		m.stop <- true
+	}
+	fmt.Println("Queued messages %d", len(m.createdMessages))
+	m.wg.Wait()
+}
+
+func (m *messageCreator) StartCreators() {
+	config := m.config
+	m.wg.Add(config.Workers.creators)
+	for i := 1; i <= config.Workers.creators; i++ {
+		go m.creator()
 	}
 }
 
-func creator(stop <-chan bool, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (m *messageCreator) creator() {
+	config := m.config
+	defer m.wg.Done()
 	msgData := make([]byte, config.msgSize)
 	for {
 		select {
-		case createdMessages <- msgData:
+		case m.createdMessages <- msgData:
 		default:
 		}
 		select {
-		case <-stop:
+		case <-m.stop:
 			fmt.Println("Stopping Creator")
 			return
 		default:
@@ -45,7 +57,7 @@ func creator(stop <-chan bool, wg *sync.WaitGroup) {
 	}
 }
 
-func createMessage(message []byte, fn messageCreator) {
+func createMessage(message []byte, fn messageCreatorStrategy) {
 	fn(message)
 }
 
