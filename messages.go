@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -27,7 +26,6 @@ func (m *messageCreator) StopCreators() {
 	for i := 1; i <= config.Workers.creators; i++ {
 		m.stop <- true
 	}
-	fmt.Println("Queued messages %d", len(m.createdMessages))
 	m.wg.Wait()
 }
 
@@ -43,6 +41,7 @@ func (m *messageCreator) creator() {
 	config := m.config
 	defer m.wg.Done()
 	msgData := make([]byte, config.msgSize)
+	createMessage(msgData, randMsg)
 	for {
 		select {
 		case m.createdMessages <- msgData:
@@ -50,7 +49,6 @@ func (m *messageCreator) creator() {
 		}
 		select {
 		case <-m.stop:
-			fmt.Println("Stopping Creator")
 			return
 		default:
 		}
