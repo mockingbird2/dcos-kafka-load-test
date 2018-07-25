@@ -15,13 +15,14 @@ type messageCreator struct {
 	createdMessages chan<- *sarama.ProducerMessage
 	wg              sync.WaitGroup
 	stop            chan bool
+	messagePool     <-chan *sarama.ProducerMessage
 }
 
 func MessageCreator(config inputConfig) *messageCreator {
 	var wg sync.WaitGroup
 	messages := make(chan *sarama.ProducerMessage, config.batchSize*100)
 	stop := make(chan bool, config.Workers.creators)
-	return &messageCreator{config, messages, wg, stop}
+	return &messageCreator{config, messages, wg, stop, messages}
 }
 
 func (m *messageCreator) StopCreators() {
@@ -71,4 +72,8 @@ func randMsg(m []byte) {
 	for i := range m {
 		m[i] = chars[generator.Intn(len(chars))]
 	}
+}
+
+func (m *messageCreator) MessagePool() <-chan *sarama.ProducerMessage {
+	return m.messagePool
 }
