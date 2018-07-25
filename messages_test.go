@@ -10,10 +10,11 @@ func TestCreatorLifecycleFinishs(t *testing.T) {
 	config := &inputConfig{}
 	config.Workers.creators = 1
 	config.msgSize = 1
-	messages := make(chan []byte, 1)
-	m := MessageCreator(*config, messages)
+	config.batchSize = 1
+	m := MessageCreator(*config)
 	m.StartCreators()
 	time.Sleep(1000 * time.Millisecond)
+	messages := m.createdMessages
 	m.StopCreators()
 	assert.True(t, len(messages) > 0)
 }

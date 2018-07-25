@@ -1,9 +1,12 @@
 package main
 
+import "time"
+
 func main() {
 	config := ParseInput()
-	createdMessages := make(chan []byte, 100)
-	creator := MessageCreator(*config, createdMessages)
+	creator := MessageCreator(*config)
 	creator.StartCreators()
+	timer := time.NewTimer(time.Duration(config.duration) * time.Second)
+	<-timer.C
 	creator.StopCreators()
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"gopkg.in/Shopify/sarama.v1"
 	"math/rand"
 	"sync"
 	"time"
@@ -10,13 +12,14 @@ type messageCreatorStrategy func([]byte)
 
 type messageCreator struct {
 	config          inputConfig
-	createdMessages chan<- []byte
+	createdMessages chan<- *sarama.ProducerMessage
 	wg              sync.WaitGroup
 	stop            chan bool
 }
 
-func MessageCreator(config inputConfig, messages chan<- []byte) *messageCreator {
+func MessageCreator(config inputConfig) *messageCreator {
 	var wg sync.WaitGroup
+	messages := make(chan *sarama.ProducerMessage, config.batchSize*100)
 	stop := make(chan bool, config.Workers.creators)
 	return &messageCreator{config, messages, wg, stop}
 }
@@ -42,13 +45,15 @@ func (m *messageCreator) creator() {
 	defer m.wg.Done()
 	msgData := make([]byte, config.msgSize)
 	createMessage(msgData, randMsg)
+	msg := &sarama.ProducerMessage{Topic: m.config.topic, Value: sarama.ByteEncoder(msgData)}
 	for {
 		select {
-		case m.createdMessages <- msgData:
+		case m.createdMessages <- msg:
 		default:
 		}
 		select {
 		case <-m.stop:
+			fmt.Println("Stopped message creator")
 			return
 		default:
 		}

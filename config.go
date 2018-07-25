@@ -17,6 +17,7 @@ type inputConfig struct {
 	requiredAcks string
 	bufferSize   int
 	msgRate      uint64
+	duration     int
 	Workers      struct {
 		creators  int
 		producers int
@@ -35,6 +36,7 @@ func ParseInput() *inputConfig {
 
 	flag.Uint64Var(&config.msgRate, "produce-rate", 100000000, "Global write rate limit (messages/sec)")
 	flag.IntVar(&config.bufferSize, "event-buffer-size", 256, "Overall buffered events in produceer")
+	flag.IntVar(&config.duration, "duration", 10, "Duration of test in secs")
 
 	flag.IntVar(&config.Workers.producers, "workers", 1, "Number of workers")
 	flag.IntVar(&config.Workers.creators, "creators", 1, "Number of message creators")
