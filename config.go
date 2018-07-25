@@ -32,7 +32,7 @@ func ParseInput() *inputConfig {
 	flag.IntVar(&config.batchSize, "message-batch-size", 500, "Messages per batch")
 
 	flag.StringVar(&config.compression, "compression", "none", "Message compression: none, gzip, snappy")
-	flag.StringVar(&config.requiredAcks, "required-acks", "none", "RequiredAcks config: none, local, all")
+	flag.StringVar(&config.requiredAcks, "required-acks", "local", "RequiredAcks config: none, local, all")
 
 	flag.Uint64Var(&config.msgRate, "produce-rate", 1000, "Global write rate limit (messages/sec)")
 	flag.IntVar(&config.bufferSize, "event-buffer-size", 256, "Overall buffered events in produceer")

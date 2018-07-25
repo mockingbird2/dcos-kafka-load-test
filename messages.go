@@ -12,15 +12,15 @@ type messageCreatorStrategy func([]byte)
 
 type messageCreator struct {
 	config          inputConfig
-	createdMessages chan<- *sarama.ProducerMessage
+	createdMessages chan<- []byte
 	wg              sync.WaitGroup
 	stop            chan bool
-	messagePool     <-chan *sarama.ProducerMessage
+	messagePool     <-chan []byte
 }
 
 func MessageCreator(config inputConfig) *messageCreator {
 	var wg sync.WaitGroup
-	messages := make(chan *sarama.ProducerMessage, config.batchSize*100)
+	messages := make(chan []byte, config.batchSize*100)
 	stop := make(chan bool, config.Workers.creators)
 	return &messageCreator{config, messages, wg, stop, messages}
 }
@@ -44,9 +44,7 @@ func (m *messageCreator) StartCreators() {
 func (m *messageCreator) creator() {
 	config := m.config
 	defer m.wg.Done()
-	msgData := make([]byte, config.msgSize)
-	createMessage(msgData, randMsg)
-	msg := &sarama.ProducerMessage{Topic: m.config.topic, Value: sarama.ByteEncoder(msgData)}
+	msg := createMessage(config.msgSize, randMsg)
 	for {
 		select {
 		case m.createdMessages <- msg:
@@ -61,8 +59,16 @@ func (m *messageCreator) creator() {
 	}
 }
 
-func createMessage(message []byte, fn messageCreatorStrategy) {
+func createMessage(size int, fn messageCreatorStrategy) []byte {
+	message := make([]byte, size)
 	fn(message)
+	return message
+}
+
+func BuildProducerMessage(topic string, msgData []byte) *sarama.ProducerMessage {
+	msg := &sarama.ProducerMessage{Topic: topic, Value: sarama.ByteEncoder(msgData)}
+	return msg
+
 }
 
 func randMsg(m []byte) {
@@ -74,6 +80,6 @@ func randMsg(m []byte) {
 	}
 }
 
-func (m *messageCreator) MessagePool() <-chan *sarama.ProducerMessage {
+func (m *messageCreator) MessagePool() <-chan []byte {
 	return m.messagePool
 }

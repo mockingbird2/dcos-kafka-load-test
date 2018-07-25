@@ -10,13 +10,13 @@ import (
 type kafkaProducer struct {
 	config   sarama.Config
 	input    inputConfig
-	messages <-chan *sarama.ProducerMessage
+	messages <-chan []byte
 	client   sarama.Client
 	ticker   time.Ticker
 	wg       sync.WaitGroup
 }
 
-func KafkaProducer(config inputConfig, m <-chan *sarama.ProducerMessage) *kafkaProducer {
+func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 	c := KafkaConfig(config)
 	interval := computeTickerInterval(config.msgRate, config.Workers.producers)
 	client, err := sarama.NewClient(config.brokers, c)
@@ -55,7 +55,7 @@ func (k *kafkaProducer) producer() {
 	for range k.ticker.C {
 		select {
 		case m := <-k.messages:
-			msgBatch = append(msgBatch, m)
+			msgBatch = append(msgBatch, BuildProducerMessage(k.input.topic, m))
 			if len(msgBatch) != k.input.batchSize {
 				continue
 			}
