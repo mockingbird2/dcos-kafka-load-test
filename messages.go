@@ -1,24 +1,26 @@
 package main
 
 import (
+	"fmt"
+	"gopkg.in/Shopify/sarama.v1"
 	"math/rand"
 	"sync"
 	"time"
 )
-
-type messageCreatorStrategy func([]byte)
 
 type messageCreator struct {
 	config          inputConfig
 	createdMessages chan<- []byte
 	wg              sync.WaitGroup
 	stop            chan bool
+	messagePool     <-chan []byte
 }
 
-func MessageCreator(config inputConfig, messages chan<- []byte) *messageCreator {
+func MessageCreator(config inputConfig) *messageCreator {
 	var wg sync.WaitGroup
+	messages := make(chan []byte, config.batchSize*100)
 	stop := make(chan bool, config.Workers.creators)
-	return &messageCreator{config, messages, wg, stop}
+	return &messageCreator{config, messages, wg, stop, messages}
 }
 
 func (m *messageCreator) StopCreators() {
@@ -40,30 +42,38 @@ func (m *messageCreator) StartCreators() {
 func (m *messageCreator) creator() {
 	config := m.config
 	defer m.wg.Done()
-	msgData := make([]byte, config.msgSize)
-	createMessage(msgData, randMsg)
+	source := rand.NewSource(time.Now().UnixNano())
+	generator := rand.New(source)
+	msg := randMsg(config.msgSize, generator)
 	for {
 		select {
-		case m.createdMessages <- msgData:
+		case m.createdMessages <- msg:
 		default:
 		}
 		select {
 		case <-m.stop:
+			fmt.Println("Stopped creator")
 			return
 		default:
 		}
 	}
 }
 
-func createMessage(message []byte, fn messageCreatorStrategy) {
-	fn(message)
+func BuildProducerMessage(topic string, msgData []byte) *sarama.ProducerMessage {
+	msg := &sarama.ProducerMessage{Topic: topic, Value: sarama.ByteEncoder(msgData)}
+	return msg
+
 }
 
-func randMsg(m []byte) {
+func randMsg(size int, generator *rand.Rand) []byte {
+	m := make([]byte, size)
 	chars := []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$^&*(){}][:<>.")
-	source := rand.NewSource(time.Now().UnixNano())
-	generator := rand.New(source)
 	for i := range m {
 		m[i] = chars[generator.Intn(len(chars))]
 	}
+	return m
+}
+
+func (m *messageCreator) MessagePool() <-chan []byte {
+	return m.messagePool
 }

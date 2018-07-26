@@ -17,6 +17,7 @@ type inputConfig struct {
 	requiredAcks string
 	bufferSize   int
 	msgRate      uint64
+	duration     int
 	Workers      struct {
 		creators  int
 		producers int
@@ -31,15 +32,18 @@ func ParseInput() *inputConfig {
 	flag.IntVar(&config.batchSize, "message-batch-size", 500, "Messages per batch")
 
 	flag.StringVar(&config.compression, "compression", "none", "Message compression: none, gzip, snappy")
-	flag.StringVar(&config.requiredAcks, "required-acks", "none", "RequiredAcks config: none, local, all")
+	flag.StringVar(&config.requiredAcks, "required-acks", "local", "RequiredAcks config: none, local, all")
 
-	flag.Uint64Var(&config.msgRate, "produce-rate", 100000000, "Global write rate limit (messages/sec)")
+	flag.Uint64Var(&config.msgRate, "produce-rate", 1000, "Global write rate limit (messages/sec)")
 	flag.IntVar(&config.bufferSize, "event-buffer-size", 256, "Overall buffered events in produceer")
+	flag.IntVar(&config.duration, "duration", 10, "Duration of test in secs")
 
 	flag.IntVar(&config.Workers.producers, "workers", 1, "Number of workers")
 	flag.IntVar(&config.Workers.creators, "creators", 1, "Number of message creators")
 	flag.Parse()
+
 	config.brokers = strings.Split(*brokerString, ",")
+	fmt.Printf("%+v\n", config)
 	return config
 }
 
@@ -73,6 +77,5 @@ func KafkaConfig(c inputConfig) *sarama.Config {
 	conf.Producer.Return.Successes = true
 	conf.Producer.Flush.MaxMessages = c.batchSize
 	conf.Producer.MaxMessageBytes = c.msgSize + 50
-
 	return conf
 }
