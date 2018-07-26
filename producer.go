@@ -50,27 +50,32 @@ func (k *kafkaProducer) StopProducers() {
 
 func (k *kafkaProducer) producer() {
 	p, err := sarama.NewSyncProducerFromClient(k.client)
-	defer p.Close()
 	defer k.wg.Done()
-	msgBatch := make([]*sarama.ProducerMessage, 0, k.input.batchSize)
+	defer p.Close()
 	if err != nil {
 		fmt.Println("New Producer Error")
 		fmt.Println(err.Error())
 		return
 	}
+	k.startSchedule(p)
+}
+
+func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
+	msgBatch := make([]*sarama.ProducerMessage, 0, k.input.batchSize)
 	for range k.ticker.C {
 		m, err := k.pollMessage()
 		if err != nil {
 			fmt.Println(err.Error())
-		}
-		msgBatch = append(msgBatch, BuildProducerMessage(k.input.topic, m))
-		if len(msgBatch) != k.input.batchSize {
-			continue
-		}
-		err = p.SendMessages(msgBatch)
-		msgBatch = msgBatch[:0]
-		if err != nil {
-			fmt.Println("Error while sending")
+		} else {
+			msgBatch = append(msgBatch, BuildProducerMessage(k.input.topic, m))
+			if len(msgBatch) != k.input.batchSize {
+				continue
+			}
+			err = p.SendMessages(msgBatch)
+			msgBatch = msgBatch[:0]
+			if err != nil {
+				fmt.Println("Error while sending")
+			}
 		}
 		select {
 		case <-k.stop:
