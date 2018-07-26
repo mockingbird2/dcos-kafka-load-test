@@ -14,6 +14,7 @@ type kafkaProducer struct {
 	client   sarama.Client
 	ticker   time.Ticker
 	wg       sync.WaitGroup
+	stop     chan bool
 }
 
 func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
@@ -26,7 +27,9 @@ func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 		fmt.Println(err.Error())
 	}
 	fmt.Println("Connected to kafka client")
-	return &kafkaProducer{*c, config, m, client, *time.NewTicker(time.Duration(interval) * time.Nanosecond), wg}
+	stop := make(chan bool, config.Workers.creators)
+	ticker := time.NewTicker(time.Duration(interval) * time.Nanosecond)
+	return &kafkaProducer{*c, config, m, client, *ticker, wg, stop}
 }
 
 func (k *kafkaProducer) StartProducers() {
@@ -39,6 +42,9 @@ func (k *kafkaProducer) StartProducers() {
 
 func (k *kafkaProducer) StopProducers() {
 	k.ticker.Stop()
+	for i := 1; i <= k.input.Workers.producers; i++ {
+		k.stop <- true
+	}
 	k.wg.Wait()
 }
 
@@ -65,6 +71,13 @@ func (k *kafkaProducer) producer() {
 				fmt.Println("Error while sending")
 			}
 		default:
+		}
+		select {
+		case <-k.stop:
+			fmt.Println("Stopped producer")
+			return
+		default:
+			continue
 		}
 	}
 }

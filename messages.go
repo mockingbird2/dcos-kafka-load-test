@@ -52,7 +52,7 @@ func (m *messageCreator) creator() {
 		}
 		select {
 		case <-m.stop:
-			fmt.Println("Stopped message creator")
+			fmt.Println("Stopped creator")
 			return
 		default:
 		}
