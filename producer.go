@@ -8,7 +8,6 @@ import (
 )
 
 type kafkaProducer struct {
-	config   sarama.Config
 	input    inputConfig
 	messages <-chan []byte
 	client   sarama.Client
@@ -29,7 +28,7 @@ func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 	fmt.Println("Connected to kafka client")
 	stop := make(chan bool, config.Workers.creators)
 	ticker := time.NewTicker(time.Duration(interval) * time.Nanosecond)
-	return &kafkaProducer{*c, config, m, client, *ticker, wg, stop}
+	return &kafkaProducer{config, m, client, *ticker, wg, stop}
 }
 
 func (k *kafkaProducer) StartProducers() {
