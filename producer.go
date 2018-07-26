@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"gopkg.in/Shopify/sarama.v1"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -15,6 +16,12 @@ type kafkaProducer struct {
 	ticker   time.Ticker
 	wg       *sync.WaitGroup
 	stop     chan bool
+	metrics  *producerMetrics
+}
+
+type producerMetrics struct {
+	sentBatches uint64
+	errors      uint64
 }
 
 func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
@@ -29,7 +36,11 @@ func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 	fmt.Println("Connected to kafka client")
 	stop := make(chan bool, config.Workers.creators)
 	ticker := time.NewTicker(time.Duration(interval) * time.Nanosecond)
-	return &kafkaProducer{config, m, client, *ticker, &wg, stop}
+	return &kafkaProducer{config, m, client, *ticker, &wg, stop, initMetrics()}
+}
+
+func initMetrics() *producerMetrics {
+	return &producerMetrics{0, 0}
 }
 
 func (k *kafkaProducer) StartProducers() {
@@ -46,6 +57,10 @@ func (k *kafkaProducer) StopProducers() {
 		k.stop <- true
 	}
 	k.wg.Wait()
+	batchCount := atomic.LoadUint64(&k.metrics.sentBatches)
+	sendingErrors := atomic.LoadUint64(&k.metrics.errors)
+	fmt.Println("Sent batches: ", batchCount)
+	fmt.Println("Errors while sending: ", sendingErrors)
 }
 
 func (k *kafkaProducer) producer() {
@@ -71,9 +86,11 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 			if len(msgBatch) != k.input.batchSize {
 				continue
 			}
+			atomic.AddUint64(&k.metrics.sentBatches, 1)
 			err = p.SendMessages(msgBatch)
 			msgBatch = msgBatch[:0]
 			if err != nil {
+				atomic.AddUint64(&k.metrics.errors, 1)
 				fmt.Println("Error while sending")
 			}
 		}
