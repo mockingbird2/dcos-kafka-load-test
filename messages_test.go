@@ -29,3 +29,22 @@ func TestRandomMessageGeneration(t *testing.T) {
 	msg2 := randMsg(msgSizee, generator)
 	assert.False(t, bytes.Equal(msg1, msg2))
 }
+
+func TestMessagePush(t *testing.T) {
+	capacity := 10
+	m := &messageCreator{}
+	messageChannel := make(chan []byte, capacity)
+	m.createdMessages = messageChannel
+	testMsg := make([]byte, 10)
+
+	err := m.pushMessage(testMsg)
+	assert.True(t, err == nil)
+
+	for i := 1; i <= capacity-1; i++ {
+		m.createdMessages <- testMsg
+	}
+
+	err = m.pushMessage(testMsg)
+	assert.True(t, err != nil)
+
+}

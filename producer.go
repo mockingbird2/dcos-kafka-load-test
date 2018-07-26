@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"gopkg.in/Shopify/sarama.v1"
 	"sync"
@@ -58,18 +59,18 @@ func (k *kafkaProducer) producer() {
 		return
 	}
 	for range k.ticker.C {
-		select {
-		case m := <-k.messages:
-			msgBatch = append(msgBatch, BuildProducerMessage(k.input.topic, m))
-			if len(msgBatch) != k.input.batchSize {
-				continue
-			}
-			err := p.SendMessages(msgBatch)
-			msgBatch = msgBatch[:0]
-			if err != nil {
-				fmt.Println("Error while sending")
-			}
-		default:
+		m, err := k.pollMessage()
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+		msgBatch = append(msgBatch, BuildProducerMessage(k.input.topic, m))
+		if len(msgBatch) != k.input.batchSize {
+			continue
+		}
+		err = p.SendMessages(msgBatch)
+		msgBatch = msgBatch[:0]
+		if err != nil {
+			fmt.Println("Error while sending")
 		}
 		select {
 		case <-k.stop:
@@ -78,6 +79,15 @@ func (k *kafkaProducer) producer() {
 		default:
 			continue
 		}
+	}
+}
+
+func (k *kafkaProducer) pollMessage() ([]byte, error) {
+	select {
+	case m := <-k.messages:
+		return m, nil
+	default:
+		return nil, errors.New("Queue not pollable")
 	}
 }
 

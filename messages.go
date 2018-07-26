@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"gopkg.in/Shopify/sarama.v1"
 	"math/rand"
@@ -46,10 +47,7 @@ func (m *messageCreator) creator() {
 	generator := rand.New(source)
 	msg := randMsg(config.msgSize, generator)
 	for {
-		select {
-		case m.createdMessages <- msg:
-		default:
-		}
+		m.pushMessage(msg)
 		select {
 		case <-m.stop:
 			fmt.Println("Stopped creator")
@@ -62,6 +60,16 @@ func (m *messageCreator) creator() {
 func BuildProducerMessage(topic string, msgData []byte) *sarama.ProducerMessage {
 	msg := &sarama.ProducerMessage{Topic: topic, Value: sarama.ByteEncoder(msgData)}
 	return msg
+
+}
+
+func (m *messageCreator) pushMessage(msg []byte) error {
+	select {
+	case m.createdMessages <- msg:
+		return nil
+	default:
+		return errors.New("Message was not pushed, discarded")
+	}
 
 }
 
