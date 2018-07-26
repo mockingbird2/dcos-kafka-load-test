@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-type messageCreatorStrategy func([]byte)
-
 type messageCreator struct {
 	config          inputConfig
 	createdMessages chan<- []byte
@@ -44,7 +42,9 @@ func (m *messageCreator) StartCreators() {
 func (m *messageCreator) creator() {
 	config := m.config
 	defer m.wg.Done()
-	msg := createMessage(config.msgSize, randMsg)
+	source := rand.NewSource(time.Now().UnixNano())
+	generator := rand.New(source)
+	msg := randMsg(config.msgSize, generator)
 	for {
 		select {
 		case m.createdMessages <- msg:
@@ -59,25 +59,19 @@ func (m *messageCreator) creator() {
 	}
 }
 
-func createMessage(size int, fn messageCreatorStrategy) []byte {
-	message := make([]byte, size)
-	fn(message)
-	return message
-}
-
 func BuildProducerMessage(topic string, msgData []byte) *sarama.ProducerMessage {
 	msg := &sarama.ProducerMessage{Topic: topic, Value: sarama.ByteEncoder(msgData)}
 	return msg
 
 }
 
-func randMsg(m []byte) {
+func randMsg(size int, generator *rand.Rand) []byte {
+	m := make([]byte, size)
 	chars := []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$^&*(){}][:<>.")
-	source := rand.NewSource(time.Now().UnixNano())
-	generator := rand.New(source)
 	for i := range m {
 		m[i] = chars[generator.Intn(len(chars))]
 	}
+	return m
 }
 
 func (m *messageCreator) MessagePool() <-chan []byte {

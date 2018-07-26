@@ -59,9 +59,8 @@ func (k *kafkaProducer) producer() {
 			if len(msgBatch) != k.input.batchSize {
 				continue
 			}
-			fmt.Println("Start sending batch size %d", len(msgBatch))
 			err := p.SendMessages(msgBatch)
-			fmt.Println("Sent batch")
+			msgBatch = msgBatch[:0]
 			if err != nil {
 				fmt.Println("Error while sending")
 			}
