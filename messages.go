@@ -11,7 +11,7 @@ import (
 type messageCreator struct {
 	config          inputConfig
 	createdMessages chan<- []byte
-	wg              sync.WaitGroup
+	wg              *sync.WaitGroup
 	stop            chan bool
 	messagePool     <-chan []byte
 }
@@ -20,7 +20,7 @@ func MessageCreator(config inputConfig) *messageCreator {
 	var wg sync.WaitGroup
 	messages := make(chan []byte, config.batchSize*100)
 	stop := make(chan bool, config.Workers.creators)
-	return &messageCreator{config, messages, wg, stop, messages}
+	return &messageCreator{config, messages, &wg, stop, messages}
 }
 
 func (m *messageCreator) StopCreators() {

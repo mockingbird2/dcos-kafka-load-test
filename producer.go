@@ -12,7 +12,7 @@ type kafkaProducer struct {
 	messages <-chan []byte
 	client   sarama.Client
 	ticker   time.Ticker
-	wg       sync.WaitGroup
+	wg       *sync.WaitGroup
 	stop     chan bool
 }
 
@@ -28,7 +28,7 @@ func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 	fmt.Println("Connected to kafka client")
 	stop := make(chan bool, config.Workers.creators)
 	ticker := time.NewTicker(time.Duration(interval) * time.Nanosecond)
-	return &kafkaProducer{config, m, client, *ticker, wg, stop}
+	return &kafkaProducer{config, m, client, *ticker, &wg, stop}
 }
 
 func (k *kafkaProducer) StartProducers() {
