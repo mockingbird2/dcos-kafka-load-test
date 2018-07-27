@@ -1,0 +1,5 @@
+README.md
+.idea/
+.git/
+.travis.yml
+deploy.py
