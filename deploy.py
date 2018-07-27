@@ -24,6 +24,10 @@ Options:
 
 """
 
+import os
+import tempfile
+import json
+import subprocess
 from docopt import docopt
 
 
@@ -58,6 +62,29 @@ def main(dcos_username, dcos_password, script_cpus, script_mem, topic,
         },
     }
     print(app_defn)
+    install_app(app_defn)
+
+
+def install_app(app_definition):
+    def decode(output):
+        return output.decode('utf-8').strip()
+    app_name = app_definition["id"]
+
+    with tempfile.TemporaryDirectory() as d:
+        app_def_file = "{}.json".format(app_name.replace('/', '__'))
+
+        app_def_path = os.path.join(d, app_def_file)
+
+        with open(app_def_path, "w") as f:
+            json.dump(app_definition, f)
+
+        cmd = "dcos marathon app add {}".format(app_def_path)
+        result = subprocess.run([cmd], shell=True, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        if result.stdout:
+            print('Stdout: ', decode(result.stdout))
+        if result.stderr:
+            print('Stderr: ', decode(result.stderr))
 
 
 if __name__ == '__main__':
@@ -65,8 +92,8 @@ if __name__ == '__main__':
 
     main(dcos_username=args['--dcos-username'],
          dcos_password=args['--dcos-password'],
-         script_cpus=args['--script-cpus'],
-         script_mem=args['--script-mem'],
+         script_cpus=int(args['--script-cpus']),
+         script_mem=int(args['--script-mem']),
          brokers=args['--brokers'],
          compression=args['--compression'],
          creators=args['--creators'],
