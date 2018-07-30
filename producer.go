@@ -13,10 +13,10 @@ type kafkaProducer struct {
 	input    inputConfig
 	messages <-chan []byte
 	client   sarama.Client
-	ticker   time.Ticker
 	wg       *sync.WaitGroup
 	stop     chan bool
 	metrics  *producerMetrics
+	interval int64
 }
 
 type producerMetrics struct {
@@ -35,8 +35,7 @@ func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 	}
 	fmt.Println("Connected to kafka client")
 	stop := make(chan bool, config.Workers.creators)
-	ticker := time.NewTicker(time.Duration(interval) * time.Nanosecond)
-	return &kafkaProducer{config, m, client, *ticker, &wg, stop, initMetrics()}
+	return &kafkaProducer{config, m, client, &wg, stop, initMetrics(), interval}
 }
 
 func initMetrics() *producerMetrics {
@@ -52,7 +51,6 @@ func (k *kafkaProducer) StartProducers() {
 }
 
 func (k *kafkaProducer) StopProducers() {
-	k.ticker.Stop()
 	for i := 1; i <= k.input.Workers.producers; i++ {
 		k.stop <- true
 	}
@@ -76,8 +74,9 @@ func (k *kafkaProducer) producer() {
 }
 
 func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
+	ticker := time.NewTicker(time.Duration(k.interval) * time.Nanosecond)
 	msgBatch := make([]*sarama.ProducerMessage, 0, k.input.batchSize)
-	for range k.ticker.C {
+	for range ticker.C {
 		m, err := k.pollMessage()
 		if err != nil {
 			fmt.Println(err.Error())
@@ -97,6 +96,7 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 		select {
 		case <-k.stop:
 			fmt.Println("Stopped producer")
+			ticker.Stop()
 			return
 		default:
 			continue
