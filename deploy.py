@@ -39,7 +39,7 @@ def main(dcos_username, dcos_password, script_cpus, script_mem, topic,
         "container": {
             "type": "DOCKER",
             "docker": {
-                "image": "fpaul/kafka-load-test",
+                "image": "fpaul/dcos-kafka-load-test",
             }
         },
         "cpus": script_cpus,
