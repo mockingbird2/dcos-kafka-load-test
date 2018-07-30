@@ -21,3 +21,9 @@ func TestMessagePoll(t *testing.T) {
 	_, err = k.pollMessage()
 	assert.True(t, err == nil)
 }
+
+func TestClientAmountCalculation(t *testing.T) {
+	assert.Equal(t, computeClientAmount(1, 1), 1)
+	assert.Equal(t, computeClientAmount(7, 5), 2)
+
+}

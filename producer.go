@@ -4,19 +4,22 @@ import (
 	"errors"
 	"fmt"
 	"gopkg.in/Shopify/sarama.v1"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
+const ProducerPerWorker float64 = 5.0
+
 type kafkaProducer struct {
 	input    inputConfig
 	messages <-chan []byte
-	client   sarama.Client
-	ticker   time.Ticker
+	clients  []sarama.Client
 	wg       *sync.WaitGroup
 	stop     chan bool
 	metrics  *producerMetrics
+	interval int64
 }
 
 type producerMetrics struct {
@@ -27,7 +30,8 @@ type producerMetrics struct {
 func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 	c := KafkaConfig(config)
 	interval := computeTickerInterval(config.msgRate, config.Workers.producers)
-	client, err := sarama.NewClient(config.brokers, c)
+	clientCount := computeClientAmount(float64(config.Workers.producers), ProducerPerWorker)
+	clients, err := createClients(clientCount, config.brokers, c)
 	var wg sync.WaitGroup
 	if err != nil {
 		fmt.Println("New Client Error")
@@ -35,8 +39,7 @@ func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 	}
 	fmt.Println("Connected to kafka client")
 	stop := make(chan bool, config.Workers.creators)
-	ticker := time.NewTicker(time.Duration(interval) * time.Nanosecond)
-	return &kafkaProducer{config, m, client, *ticker, &wg, stop, initMetrics()}
+	return &kafkaProducer{config, m, clients, &wg, stop, initMetrics(), interval}
 }
 
 func initMetrics() *producerMetrics {
@@ -46,13 +49,13 @@ func initMetrics() *producerMetrics {
 func (k *kafkaProducer) StartProducers() {
 	count := k.input.Workers.producers
 	k.wg.Add(count)
-	for i := 1; i <= count; i++ {
-		go k.producer()
+	for i := 0; i < count; i++ {
+		client := k.clients[i/int(ProducerPerWorker)]
+		go k.producer(client)
 	}
 }
 
 func (k *kafkaProducer) StopProducers() {
-	k.ticker.Stop()
 	for i := 1; i <= k.input.Workers.producers; i++ {
 		k.stop <- true
 	}
@@ -63,8 +66,8 @@ func (k *kafkaProducer) StopProducers() {
 	fmt.Println("Errors while sending: ", sendingErrors)
 }
 
-func (k *kafkaProducer) producer() {
-	p, err := sarama.NewSyncProducerFromClient(k.client)
+func (k *kafkaProducer) producer(client sarama.Client) {
+	p, err := sarama.NewSyncProducerFromClient(client)
 	defer k.wg.Done()
 	defer p.Close()
 	if err != nil {
@@ -75,9 +78,26 @@ func (k *kafkaProducer) producer() {
 	k.startSchedule(p)
 }
 
+func createClients(amount int, brokers []string, config *sarama.Config) ([]sarama.Client, error) {
+	clients := make([]sarama.Client, amount, amount)
+	for i := 0; i < amount; i++ {
+		client, err := sarama.NewClient(brokers, config)
+		if err != nil {
+			return clients, err
+		}
+		clients[i] = client
+	}
+	return clients, nil
+}
+
+func computeClientAmount(workers float64, writers float64) int {
+	return int(math.Ceil(workers / writers))
+}
+
 func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
+	ticker := time.NewTicker(time.Duration(k.interval) * time.Nanosecond)
 	msgBatch := make([]*sarama.ProducerMessage, 0, k.input.batchSize)
-	for range k.ticker.C {
+	for range ticker.C {
 		m, err := k.pollMessage()
 		if err != nil {
 			fmt.Println(err.Error())
@@ -97,6 +117,7 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 		select {
 		case <-k.stop:
 			fmt.Println("Stopped producer")
+			ticker.Stop()
 			return
 		default:
 			continue
