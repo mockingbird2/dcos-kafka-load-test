@@ -112,6 +112,7 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 			if err != nil {
 				atomic.AddUint64(&k.metrics.errors, 1)
 				fmt.Println("Error while sending")
+				fmt.Println(err.Error())
 			}
 		}
 		select {
