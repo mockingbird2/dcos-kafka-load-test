@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"gopkg.in/Shopify/sarama.v1"
 	"math/rand"
@@ -10,18 +9,17 @@ import (
 )
 
 type messageCreator struct {
-	config          inputConfig
-	createdMessages chan<- []byte
-	wg              *sync.WaitGroup
-	stop            chan bool
-	messagePool     <-chan []byte
+	config      inputConfig
+	wg          *sync.WaitGroup
+	stop        chan bool
+	messagePool *sync.Pool
 }
 
 func MessageCreator(config inputConfig) *messageCreator {
 	var wg sync.WaitGroup
-	messages := make(chan []byte, config.batchSize*100)
+	messages := MessagePool(config.msgSize)
 	stop := make(chan bool, config.Workers.creators)
-	return &messageCreator{config, messages, &wg, stop, messages}
+	return &messageCreator{config, &wg, stop, messages}
 }
 
 func (m *messageCreator) StopCreators() {
@@ -41,11 +39,11 @@ func (m *messageCreator) StartCreators() {
 }
 
 func (m *messageCreator) creator() {
-	config := m.config
 	defer m.wg.Done()
 	source := rand.NewSource(time.Now().UnixNano())
 	generator := rand.New(source)
-	msg := randMsg(config.msgSize, generator)
+	msg := make([]byte, m.config.msgSize)
+	randMsg(msg, generator)
 	for {
 		m.pushMessage(msg)
 		select {
@@ -63,25 +61,17 @@ func BuildProducerMessage(topic string, msgData []byte) *sarama.ProducerMessage 
 
 }
 
-func (m *messageCreator) pushMessage(msg []byte) error {
-	select {
-	case m.createdMessages <- msg:
-		return nil
-	default:
-		return errors.New("Message was not pushed, discarded")
-	}
-
+func (m *messageCreator) pushMessage(msg []byte) {
+	m.Pool().Put(msg)
 }
 
-func randMsg(size int, generator *rand.Rand) []byte {
-	m := make([]byte, size)
+func randMsg(m []byte, generator *rand.Rand) {
 	chars := []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$^&*(){}][:<>.")
 	for i := range m {
 		m[i] = chars[generator.Intn(len(chars))]
 	}
-	return m
 }
 
-func (m *messageCreator) MessagePool() <-chan []byte {
+func (m *messageCreator) Pool() *sync.Pool {
 	return m.messagePool
 }

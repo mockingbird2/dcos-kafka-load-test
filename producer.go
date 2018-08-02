@@ -1,20 +1,21 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"gopkg.in/Shopify/sarama.v1"
 	"math"
 	"sync"
 	"sync/atomic"
 	"time"
+	"bytes"
+	"encoding/gob"
 )
 
 const ProducerPerWorker float64 = 5.0
 
 type kafkaProducer struct {
 	input    inputConfig
-	messages <-chan []byte
+	messages *sync.Pool
 	clients  []sarama.Client
 	wg       *sync.WaitGroup
 	stop     chan bool
@@ -27,7 +28,7 @@ type producerMetrics struct {
 	errors      uint64
 }
 
-func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
+func KafkaProducer(config inputConfig, m *sync.Pool) *kafkaProducer {
 	c := KafkaConfig(config)
 	interval := computeTickerInterval(config.msgRate, config.Workers.producers)
 	clientCount := computeClientAmount(float64(config.Workers.producers), ProducerPerWorker)
@@ -98,16 +99,16 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 	ticker := time.NewTicker(time.Duration(k.interval) * time.Nanosecond)
 	msgBatch := make([]*sarama.ProducerMessage, 0, k.input.batchSize)
 	for range ticker.C {
-		m, err := k.pollMessage()
-		if err != nil {
-			fmt.Println(err.Error())
+		m := k.pollMessage()
+		if m == nil {
+			fmt.Println("Could not retrieve message from pool")
 		} else {
 			msgBatch = append(msgBatch, BuildProducerMessage(k.input.topic, m))
 			if len(msgBatch) != k.input.batchSize {
 				continue
 			}
 			atomic.AddUint64(&k.metrics.sentBatches, 1)
-			err = p.SendMessages(msgBatch)
+			err := p.SendMessages(msgBatch)
 			msgBatch = msgBatch[:0]
 			if err != nil {
 				atomic.AddUint64(&k.metrics.errors, 1)
@@ -126,13 +127,15 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 	}
 }
 
-func (k *kafkaProducer) pollMessage() ([]byte, error) {
-	select {
-	case m := <-k.messages:
-		return m, nil
-	default:
-		return nil, errors.New("Queue not pollable")
+func (k *kafkaProducer) pollMessage() []byte {
+	polled := k.messages.Get()
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(polled)
+	if err != nil {
+		fmt.Println("Encoding Error")
 	}
+	return buf.Bytes()
 }
 
 func computeTickerInterval(msgRate uint64, workerCount int) int64 {

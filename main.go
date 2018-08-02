@@ -9,7 +9,7 @@ func main() {
 	config := ParseInput()
 	creator := MessageCreator(*config)
 	creator.StartCreators()
-	producer := KafkaProducer(*config, creator.MessagePool())
+	producer := KafkaProducer(*config, creator.Pool())
 	producer.StartProducers()
 	timer := time.NewTimer(time.Duration(config.duration) * time.Second)
 	<-timer.C

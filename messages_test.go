@@ -16,35 +16,18 @@ func TestCreatorLifecycleFinishs(t *testing.T) {
 	m := MessageCreator(*config)
 	m.StartCreators()
 	time.Sleep(1000 * time.Millisecond)
-	messages := m.createdMessages
+	messages := m.Pool()
 	m.StopCreators()
-	assert.True(t, len(messages) > 0)
+	assert.True(t, messages.Get() != nil)
 }
 
 func TestRandomMessageGeneration(t *testing.T) {
-	msgSizee := 1000
+	msgSize := 1000
+	msg1 := make([]byte, msgSize)
+	msg2 := make([]byte, msgSize)
 	source := rand.NewSource(time.Now().UnixNano())
 	generator := rand.New(source)
-	msg1 := randMsg(msgSizee, generator)
-	msg2 := randMsg(msgSizee, generator)
+	randMsg(msg1, generator)
+	randMsg(msg2, generator)
 	assert.False(t, bytes.Equal(msg1, msg2))
-}
-
-func TestMessagePush(t *testing.T) {
-	capacity := 10
-	m := &messageCreator{}
-	messageChannel := make(chan []byte, capacity)
-	m.createdMessages = messageChannel
-	testMsg := make([]byte, 10)
-
-	err := m.pushMessage(testMsg)
-	assert.True(t, err == nil)
-
-	for i := 1; i <= capacity-1; i++ {
-		m.createdMessages <- testMsg
-	}
-
-	err = m.pushMessage(testMsg)
-	assert.True(t, err != nil)
-
 }

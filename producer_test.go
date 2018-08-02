@@ -12,14 +12,10 @@ func TestComputeTickerInterval(t *testing.T) {
 
 func TestMessagePoll(t *testing.T) {
 	k := &kafkaProducer{}
-	m := make(chan []byte, 10)
+	m := MessagePool(1)
 	k.messages = m
-	_, err := k.pollMessage()
-	assert.True(t, err != nil)
-
-	m <- make([]byte, 10)
-	_, err = k.pollMessage()
-	assert.True(t, err == nil)
+	msg := k.pollMessage()
+	assert.True(t, msg != nil)
 }
 
 func TestClientAmountCalculation(t *testing.T) {
