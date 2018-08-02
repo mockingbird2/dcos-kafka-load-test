@@ -4,23 +4,22 @@ import (
 	"fmt"
 	"gopkg.in/Shopify/sarama.v1"
 	"math"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
-	"bytes"
-	"encoding/gob"
 )
 
-const ProducerPerWorker float64 = 5.0
+const WorkerPerProducer float64 = 5.0
 
 type kafkaProducer struct {
-	input    inputConfig
-	messages *sync.Pool
-	clients  []sarama.Client
-	wg       *sync.WaitGroup
-	stop     chan bool
-	metrics  *producerMetrics
-	interval int64
+	input     inputConfig
+	messages  *sync.Pool
+	producers []sarama.SyncProducer
+	wg        *sync.WaitGroup
+	stop      chan bool
+	metrics   *producerMetrics
+	interval  int64
 }
 
 type producerMetrics struct {
@@ -31,13 +30,16 @@ type producerMetrics struct {
 func KafkaProducer(config inputConfig, m *sync.Pool) *kafkaProducer {
 	c := KafkaConfig(config)
 	interval := computeTickerInterval(config.msgRate, config.Workers.producers)
-	clientCount := computeClientAmount(float64(config.Workers.producers), ProducerPerWorker)
-	clients, err := createClients(clientCount, config.brokers, c)
-	var wg sync.WaitGroup
+	clientCount := computeClientAmount(float64(config.Workers.producers), WorkerPerProducer)
+	client, err := sarama.NewClient(config.brokers, c)
 	if err != nil {
 		fmt.Println("New Client Error")
 		fmt.Println(err.Error())
 	}
+	clients, err := createClients(clientCount, client)
+	if err != nil {
+	}
+	var wg sync.WaitGroup
 	fmt.Println("Connected to kafka client")
 	stop := make(chan bool, config.Workers.creators)
 	return &kafkaProducer{config, m, clients, &wg, stop, initMetrics(), interval}
@@ -51,7 +53,7 @@ func (k *kafkaProducer) StartProducers() {
 	count := k.input.Workers.producers
 	k.wg.Add(count)
 	for i := 0; i < count; i++ {
-		client := k.clients[i/int(ProducerPerWorker)]
+		client := k.producers[i/int(WorkerPerProducer)]
 		go k.producer(client)
 	}
 }
@@ -65,24 +67,20 @@ func (k *kafkaProducer) StopProducers() {
 	sendingErrors := atomic.LoadUint64(&k.metrics.errors)
 	fmt.Println("Sent batches: ", batchCount)
 	fmt.Println("Errors while sending: ", sendingErrors)
+	for _, p := range k.producers {
+		p.Close()
+	}
 }
 
-func (k *kafkaProducer) producer(client sarama.Client) {
-	p, err := sarama.NewSyncProducerFromClient(client)
+func (k *kafkaProducer) producer(p sarama.SyncProducer) {
 	defer k.wg.Done()
-	defer p.Close()
-	if err != nil {
-		fmt.Println("New Producer Error")
-		fmt.Println(err.Error())
-		return
-	}
 	k.startSchedule(p)
 }
 
-func createClients(amount int, brokers []string, config *sarama.Config) ([]sarama.Client, error) {
-	clients := make([]sarama.Client, amount, amount)
+func createClients(amount int, client sarama.Client) ([]sarama.SyncProducer, error) {
+	clients := make([]sarama.SyncProducer, amount, amount)
 	for i := 0; i < amount; i++ {
-		client, err := sarama.NewClient(brokers, config)
+		client, err := sarama.NewSyncProducerFromClient(client)
 		if err != nil {
 			return clients, err
 		}
@@ -128,14 +126,19 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 }
 
 func (k *kafkaProducer) pollMessage() []byte {
-	polled := k.messages.Get()
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(polled)
-	if err != nil {
-		fmt.Println("Encoding Error")
-	}
-	return buf.Bytes()
+	//polled := k.messages.Get()
+	//var buf bytes.Buffer
+	//enc := gob.NewEncoder(&buf)
+	//err := enc.Encode(polled)
+	//if err != nil {
+	//	fmt.Println("Encoding Error")
+	//}
+	//return buf.Bytes()
+	m := make([]byte, k.input.msgSize)
+	source := rand.NewSource(time.Now().UnixNano())
+	generator := rand.New(source)
+	randMsg(m, generator)
+	return m
 }
 
 func computeTickerInterval(msgRate uint64, workerCount int) int64 {
