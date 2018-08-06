@@ -27,7 +27,7 @@ func (metrics *producerMetrics) StartReporting() {
 		defer metrics.wg.Done()
 		for range ticker.C {
 			current := metrics.SentBatches()
-			fmt.Printf("%d batches/s\n", current-started)
+			LogInfo(fmt.Sprintf("%d batches/s", current-started))
 			started = current
 			select {
 			case <-metrics.done:
@@ -42,6 +42,8 @@ func (metrics *producerMetrics) StartReporting() {
 func (metrics *producerMetrics) StopReporting() {
 	metrics.done <- true
 	metrics.wg.Wait()
+	LogInfo(fmt.Sprintf("Sent batches: %d", metrics.SentBatches()))
+	LogInfo(fmt.Sprintf("Errors while sending: %d", metrics.Errors()))
 }
 
 func (metrics *producerMetrics) AddBatch() {

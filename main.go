@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"time"
 )
 
 func main() {
+	InitLoggers()
 	config := ParseInput()
 	creator := MessageCreator(*config)
 	creator.StartCreators()
@@ -14,7 +14,7 @@ func main() {
 	timer := time.NewTimer(time.Duration(config.duration) * time.Second)
 	<-timer.C
 	producer.StopProducers()
-	fmt.Println("Stopped producers")
+	LogInfo("Stopped producers")
 	creator.StopCreators()
-	fmt.Println("Stopped creators")
+	LogInfo("Stopped creators")
 }

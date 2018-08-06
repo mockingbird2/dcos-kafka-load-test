@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"gopkg.in/Shopify/sarama.v1"
 	"math"
 	"sync"
@@ -28,10 +27,10 @@ func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 	clients, err := createClients(clientCount, config.brokers, c)
 	var wg sync.WaitGroup
 	if err != nil {
-		fmt.Println("New Client Error")
-		fmt.Println(err.Error())
+		LogError("New Client Error")
+		LogError(err.Error())
 	}
-	fmt.Println("Connected to kafka client")
+	LogInfo("Connected to kafka client")
 	stop := make(chan bool, config.Workers.creators)
 	return &kafkaProducer{config, m, clients, &wg, stop, CreateMetrics(), interval}
 }
@@ -52,10 +51,6 @@ func (k *kafkaProducer) StopProducers() {
 	}
 	k.wg.Wait()
 	k.metrics.StopReporting()
-	batchCount := k.metrics.SentBatches()
-	sendingErrors := k.metrics.Errors()
-	fmt.Println("Sent batches: ", batchCount)
-	fmt.Println("Errors while sending: ", sendingErrors)
 }
 
 func (k *kafkaProducer) producer(client sarama.Client) {
@@ -63,8 +58,8 @@ func (k *kafkaProducer) producer(client sarama.Client) {
 	defer k.wg.Done()
 	defer p.Close()
 	if err != nil {
-		fmt.Println("New Producer Error")
-		fmt.Println(err.Error())
+		LogError("New Producer Error")
+		LogError(err.Error())
 		return
 	}
 	k.startSchedule(p)
@@ -92,7 +87,7 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 	for range ticker.C {
 		m, err := k.pollMessage()
 		if err != nil {
-			fmt.Println(err.Error())
+			LogError(err.Error())
 		} else {
 			msgBatch = append(msgBatch, BuildProducerMessage(k.input.topic, m))
 			if len(msgBatch) != k.input.batchSize {
@@ -103,7 +98,7 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 			msgBatch = msgBatch[:0]
 			if err != nil {
 				k.metrics.AddError()
-				fmt.Println("Error while sending")
+				LogError("Error while sending")
 			}
 		}
 		select {
