@@ -2,11 +2,9 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"gopkg.in/Shopify/sarama.v1"
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -22,11 +20,6 @@ type kafkaProducer struct {
 	interval int64
 }
 
-type producerMetrics struct {
-	sentBatches uint64
-	errors      uint64
-}
-
 func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 	c := KafkaConfig(config)
 	interval := computeTickerInterval(config.msgRate, config.Workers.producers)
@@ -34,20 +27,17 @@ func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 	clients, err := createClients(clientCount, config.brokers, c)
 	var wg sync.WaitGroup
 	if err != nil {
-		fmt.Println("New Client Error")
-		fmt.Println(err.Error())
+		LogError("New Client Error")
+		LogError(err.Error())
 	}
-	fmt.Println("Connected to kafka client")
+	LogInfo("Connected to kafka client")
 	stop := make(chan bool, config.Workers.creators)
-	return &kafkaProducer{config, m, clients, &wg, stop, initMetrics(), interval}
-}
-
-func initMetrics() *producerMetrics {
-	return &producerMetrics{0, 0}
+	return &kafkaProducer{config, m, clients, &wg, stop, CreateMetrics(), interval}
 }
 
 func (k *kafkaProducer) StartProducers() {
 	count := k.input.Workers.producers
+	k.metrics.StartReporting()
 	k.wg.Add(count)
 	for i := 0; i < count; i++ {
 		client := k.clients[i/int(ProducerPerWorker)]
@@ -60,10 +50,7 @@ func (k *kafkaProducer) StopProducers() {
 		k.stop <- true
 	}
 	k.wg.Wait()
-	batchCount := atomic.LoadUint64(&k.metrics.sentBatches)
-	sendingErrors := atomic.LoadUint64(&k.metrics.errors)
-	fmt.Println("Sent batches: ", batchCount)
-	fmt.Println("Errors while sending: ", sendingErrors)
+	k.metrics.StopReporting()
 }
 
 func (k *kafkaProducer) producer(client sarama.Client) {
@@ -71,8 +58,8 @@ func (k *kafkaProducer) producer(client sarama.Client) {
 	defer k.wg.Done()
 	defer p.Close()
 	if err != nil {
-		fmt.Println("New Producer Error")
-		fmt.Println(err.Error())
+		LogError("New Producer Error")
+		LogError(err.Error())
 		return
 	}
 	k.startSchedule(p)
@@ -100,23 +87,22 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 	for range ticker.C {
 		m, err := k.pollMessage()
 		if err != nil {
-			fmt.Println(err.Error())
+			LogError(err.Error())
 		} else {
 			msgBatch = append(msgBatch, BuildProducerMessage(k.input.topic, m))
 			if len(msgBatch) != k.input.batchSize {
 				continue
 			}
-			atomic.AddUint64(&k.metrics.sentBatches, 1)
 			err = p.SendMessages(msgBatch)
+			k.metrics.AddBatch()
 			msgBatch = msgBatch[:0]
 			if err != nil {
-				atomic.AddUint64(&k.metrics.errors, 1)
-				fmt.Println("Error while sending")
+				k.metrics.AddError()
+				LogError("Error while sending")
 			}
 		}
 		select {
 		case <-k.stop:
-			fmt.Println("Stopped producer")
 			ticker.Stop()
 			return
 		default:

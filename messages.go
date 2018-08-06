@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"gopkg.in/Shopify/sarama.v1"
 	"math/rand"
 	"sync"
@@ -50,7 +49,6 @@ func (m *messageCreator) creator() {
 		m.pushMessage(msg)
 		select {
 		case <-m.stop:
-			fmt.Println("Stopped creator")
 			return
 		default:
 		}

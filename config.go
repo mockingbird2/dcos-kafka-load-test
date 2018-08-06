@@ -43,7 +43,7 @@ func ParseInput() *inputConfig {
 	flag.Parse()
 
 	config.brokers = strings.Split(*brokerString, ",")
-	fmt.Printf("%+v\n", config)
+	LogInfo(fmt.Sprintf("%+v\n", config))
 	return config
 }
 
@@ -58,7 +58,7 @@ func KafkaConfig(c inputConfig) *sarama.Config {
 	case "none":
 		conf.Producer.Compression = sarama.CompressionNone
 	default:
-		fmt.Printf("Invalid compression option: %s\n", c.compression)
+		LogInfo(fmt.Sprintf("Invalid compression option: %s\n", c.compression))
 		os.Exit(1)
 	}
 
@@ -70,7 +70,7 @@ func KafkaConfig(c inputConfig) *sarama.Config {
 	case "all":
 		conf.Producer.RequiredAcks = sarama.WaitForAll
 	default:
-		fmt.Printf("Invalid required-acks option: %s\n", c.requiredAcks)
+		LogInfo(fmt.Sprintf("Invalid required-acks option: %s\n", c.requiredAcks))
 		os.Exit(1)
 	}
 
