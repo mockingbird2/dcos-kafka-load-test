@@ -18,6 +18,7 @@ func TestAddError(t *testing.T) {
 }
 
 func TestStartReporting(t *testing.T) {
+	InitLoggers()
 	metrics := CreateMetrics()
 	metrics.StartReporting()
 	metrics.AddBatch()
