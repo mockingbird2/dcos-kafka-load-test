@@ -93,8 +93,8 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 			if len(msgBatch) != k.input.batchSize {
 				continue
 			}
-			k.metrics.AddBatch()
 			err = p.SendMessages(msgBatch)
+			k.metrics.AddBatch()
 			msgBatch = msgBatch[:0]
 			if err != nil {
 				k.metrics.AddError()
