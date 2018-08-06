@@ -116,7 +116,6 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 		}
 		select {
 		case <-k.stop:
-			fmt.Println("Stopped producer")
 			ticker.Stop()
 			return
 		default:
