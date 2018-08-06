@@ -6,7 +6,6 @@ import (
 	"gopkg.in/Shopify/sarama.v1"
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -22,11 +21,6 @@ type kafkaProducer struct {
 	interval int64
 }
 
-type producerMetrics struct {
-	sentBatches uint64
-	errors      uint64
-}
-
 func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 	c := KafkaConfig(config)
 	interval := computeTickerInterval(config.msgRate, config.Workers.producers)
@@ -39,15 +33,12 @@ func KafkaProducer(config inputConfig, m <-chan []byte) *kafkaProducer {
 	}
 	fmt.Println("Connected to kafka client")
 	stop := make(chan bool, config.Workers.creators)
-	return &kafkaProducer{config, m, clients, &wg, stop, initMetrics(), interval}
-}
-
-func initMetrics() *producerMetrics {
-	return &producerMetrics{0, 0}
+	return &kafkaProducer{config, m, clients, &wg, stop, CreateMetrics(), interval}
 }
 
 func (k *kafkaProducer) StartProducers() {
 	count := k.input.Workers.producers
+	k.metrics.StartReporting()
 	k.wg.Add(count)
 	for i := 0; i < count; i++ {
 		client := k.clients[i/int(ProducerPerWorker)]
@@ -60,8 +51,9 @@ func (k *kafkaProducer) StopProducers() {
 		k.stop <- true
 	}
 	k.wg.Wait()
-	batchCount := atomic.LoadUint64(&k.metrics.sentBatches)
-	sendingErrors := atomic.LoadUint64(&k.metrics.errors)
+	k.metrics.StopReporting()
+	batchCount := k.metrics.SentBatches()
+	sendingErrors := k.metrics.Errors()
 	fmt.Println("Sent batches: ", batchCount)
 	fmt.Println("Errors while sending: ", sendingErrors)
 }
@@ -106,11 +98,11 @@ func (k *kafkaProducer) startSchedule(p sarama.SyncProducer) {
 			if len(msgBatch) != k.input.batchSize {
 				continue
 			}
-			atomic.AddUint64(&k.metrics.sentBatches, 1)
+			k.metrics.AddBatch()
 			err = p.SendMessages(msgBatch)
 			msgBatch = msgBatch[:0]
 			if err != nil {
-				atomic.AddUint64(&k.metrics.errors, 1)
+				k.metrics.AddError()
 				fmt.Println("Error while sending")
 			}
 		}
